@@ -15,6 +15,7 @@ def resnet50_v2():
         nn.Dropout(0.3),
         nn.Linear(512, num_classes)
     )
+    return model
 
 def resnet101_v1():
     model = models.resnet50(weights='DEFAULT')
