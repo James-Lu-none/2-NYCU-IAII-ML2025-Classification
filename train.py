@@ -8,9 +8,10 @@ import numpy as np
 from collections import defaultdict
 from models import *
 import argparse
+from tqdm import tqdm
 
 data_dir = "./data"
-
+model_dir = "./model"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 class train:
@@ -20,6 +21,10 @@ class train:
         self.train_loader = None
         self.val_loader = None
         self.num_classes = None
+        self.best_weights = None
+        self.criterion = None
+        self.optimizer = None
+        self.scheduler = None
 
     def get_model(self):
         match self.model_choice:
@@ -27,7 +32,7 @@ class train:
                 self.model = resnet50_v1()
             case "resnet50_v2":
                 self.model = resnet50_v2()
-            case "resnet101":
+            case "resnet101_v1":
                 self.model = resnet101_v1()    
         self.model.to(device)
         
@@ -113,7 +118,9 @@ class train:
         self.model.train()
         total_loss, total_correct, total = 0, 0, 0
 
-        for x, y in self.train_loader:
+        progress_bar = tqdm(self.train_loader, desc="Training", leave=False)
+
+        for x, y in progress_bar:
             x, y = x.to(device), y.to(device)
             self.optimizer.zero_grad()
             out = self.model(x)
@@ -125,8 +132,15 @@ class train:
             _, pred = out.max(1)
             total_correct += pred.eq(y).sum().item()
             total += y.size(0)
+            
+            progress_bar.set_postfix({
+                'loss': f'{loss.item():.4f}',
+                'acc': f'{100. * total_correct / total:.2f}%'
+            })
 
-        return total_loss / total, 100.0 * total_correct / total
+        avg_loss = total_loss / total
+        avg_acc = 100.0 * total_correct / total
+        return avg_loss, avg_acc
 
     def validate(self):
         self.model.eval()
@@ -165,8 +179,8 @@ class train:
 
             if val_acc > best_acc:
                 best_acc = val_acc
-                torch.save(self.model.state_dict(), f"best_{self.model_choice}.pth")
-                print(f"Saved best model (val_acc={best_acc:.2f}%)")
+                self.best_weights = self.model.state_dict()
+                print(f"New best model (val_acc={best_acc:.2f}%)")
 
         print(f"Finished training, Best acc: {best_acc:.2f}%")
 
@@ -180,6 +194,11 @@ class train:
         print("=== Phase 2: Fine-tune entire model ===")
         self.train_model(epochs=5, lr=0.0001, freeze_backbone=False)
 
+        timestamp = np.datetime64('now').astype('str').replace(':', '-').replace(' ', '_')
+        model_path = os.path.join(model_dir, self.model_choice)
+        os.makedirs(model_path, exist_ok=True)
+        model_disk = os.path.join(model_path, f"{timestamp}.pth")
+        torch.save(self.model.state_dict(), model_disk)
 
 if __name__ == "__main__":
     # Train with frozen backbone first (faster, less memory)
