@@ -7,233 +7,186 @@ import os
 import numpy as np
 from collections import defaultdict
 from models import *
+import argparse
 
 data_dir = "./data"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
+class train:
+    def __init__(self, model_choice=None):
+        self.model = None
+        self.model_choice = model_choice
+        self.train_loader = None
+        self.val_loader = None
+        self.num_classes = None
 
-def get_model(model_name):
-    match model_name:
-        case "resnet50_v1":
-            return resnet50_v1()
-        case "resnet50_v2":
-            return resnet50_v2()
-        case "resnet101":
-            return resnet101_v1()
+    def get_model(self):
+        match self.model_choice:
+            case "resnet50_v1":
+                self.model = resnet50_v1()
+            case "resnet50_v2":
+                self.model = resnet50_v2()
+            case "resnet101":
+                self.model = resnet101_v1()    
+        self.model.to(device)
         
-# ============================================
-# 2. DATA PREPARATION
-# ============================================
+    def get_data_loaders(self, batch_size=32, num_workers=4):
+        # ImageNet normalization
+        normalize = transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        )
 
-def get_data_loaders(batch_size=32, num_workers=4):
-    # ImageNet normalization
-    normalize = transforms.Normalize(
-        mean=[0.485, 0.456, 0.406],
-        std=[0.229, 0.224, 0.225]
-    )
+        # Transforms (same for train/val here)
+        transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize
+        ])
 
-    # Transforms (same for train/val here)
-    transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        normalize
-    ])
+        # Use single source directory
+        full_dataset = datasets.ImageFolder(os.path.join(data_dir, "pre"))
 
-    # Use single source directory
-    full_dataset = datasets.ImageFolder(os.path.join(data_dir, "pre"))
+        # Stratified split by class
+        val_split = 0.2
+        class_indices = defaultdict(list)
+        for idx, (_, label) in enumerate(full_dataset.samples):
+            class_indices[label].append(idx)
 
-    # Stratified split by class
-    val_split = 0.2
-    class_indices = defaultdict(list)
-    for idx, (_, label) in enumerate(full_dataset.samples):
-        class_indices[label].append(idx)
+        train_indices, val_indices = [], []
+        np.random.seed(42)
 
-    train_indices, val_indices = [], []
-    np.random.seed(42)
+        for class_label, indices in class_indices.items():
+            indices = np.array(indices)
+            np.random.shuffle(indices)
+            split_point = int(len(indices) * (1 - val_split))
+            train_indices.extend(indices[:split_point].tolist())
+            val_indices.extend(indices[split_point:].tolist())
 
-    for class_label, indices in class_indices.items():
-        indices = np.array(indices)
-        np.random.shuffle(indices)
-        split_point = int(len(indices) * (1 - val_split))
-        train_indices.extend(indices[:split_point].tolist())
-        val_indices.extend(indices[split_point:].tolist())
+        print(f"Total samples: {len(full_dataset)}")
+        print(f"Training samples: {len(train_indices)}")
+        print(f"Validation samples: {len(val_indices)}")
 
-    print(f"Total samples: {len(full_dataset)}")
-    print(f"Training samples: {len(train_indices)}")
-    print(f"Validation samples: {len(val_indices)}")
+        # Create Subsets (keep correct indices, apply transforms after)
+        train_dataset = Subset(full_dataset, train_indices)
+        val_dataset = Subset(full_dataset, val_indices)
 
-    # Create Subsets (keep correct indices, apply transforms after)
-    train_dataset = Subset(full_dataset, train_indices)
-    val_dataset = Subset(full_dataset, val_indices)
+        # Assign transforms AFTER splitting
+        train_dataset.dataset.transform = transform
+        val_dataset.dataset.transform = transform
 
-    # Assign transforms AFTER splitting
-    train_dataset.dataset.transform = transform
-    val_dataset.dataset.transform = transform
+        # Dataloaders
+        self.train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+            pin_memory=True
+        )
 
-    # Dataloaders
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        pin_memory=True
-    )
+        self.val_loader = DataLoader(
+            val_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=True
+        )
 
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True
-    )
+        self.num_classes = len(full_dataset.classes)
 
-    return train_loader, val_loader, len(full_dataset.classes)
+    def set_freeze_mode(self, freeze_backbone=True):
+        for param in self.model.parameters():
+            param.requires_grad = not freeze_backbone
 
+        if freeze_backbone:
+            # Unfreeze only classifier
+            if hasattr(self.model, "fc"):
+                for p in self.model.fc.parameters():
+                    p.requires_grad = True
+            elif hasattr(self.model, "classifier"):
+                for p in self.model.classifier.parameters():
+                    p.requires_grad = True
 
-# ============================================
-# 3. TRAINING FUNCTION
-# ============================================
+    def train_one_epoch(self):
+        self.model.train()
+        total_loss, total_correct, total = 0, 0, 0
 
-def train_epoch(model, loader, criterion, optimizer, device):
-    model.train()
-    running_loss = 0.0
-    correct = 0
-    total = 0
-    
-    for inputs, labels in loader:
-        inputs, labels = inputs.to(device), labels.to(device)
-        
-        optimizer.zero_grad()
-        outputs = model(inputs)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
-        
-        running_loss += loss.item() * inputs.size(0)
-        _, predicted = outputs.max(1)
-        total += labels.size(0)
-        correct += predicted.eq(labels).sum().item()
-    
-    epoch_loss = running_loss / total
-    epoch_acc = 100. * correct / total
-    return epoch_loss, epoch_acc
+        for x, y in self.train_loader:
+            x, y = x.to(device), y.to(device)
+            self.optimizer.zero_grad()
+            out = self.model(x)
+            loss = self.criterion(out, y)
+            loss.backward()
+            self.optimizer.step()
 
-def validate(model, loader, criterion, device):
-    model.eval()
-    running_loss = 0.0
-    correct = 0
-    total = 0
-    
-    with torch.no_grad():
-        for inputs, labels in loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            
-            running_loss += loss.item() * inputs.size(0)
-            _, predicted = outputs.max(1)
-            total += labels.size(0)
-            correct += predicted.eq(labels).sum().item()
-    
-    epoch_loss = running_loss / total
-    epoch_acc = 100. * correct / total
-    return epoch_loss, epoch_acc
+            total_loss += loss.item() * x.size(0)
+            _, pred = out.max(1)
+            total_correct += pred.eq(y).sum().item()
+            total += y.size(0)
 
-# ============================================
-# 4. MAIN TRAINING LOOP
-# ============================================
+        return total_loss / total, 100.0 * total_correct / total
 
-def train_model(model_name, epochs=10, 
-                batch_size=32, lr=0.001, freeze_backbone=True):
-    """
-    Train a transfer learning model
-    
-    Args:
-        data_dir: Path to data directory
-        model_name: Model architecture to use
-        epochs: Number of training epochs
-        batch_size: Batch size (reduce if OOM)
-        lr: Learning rate
-        freeze_backbone: If True, only train final layer initially
-    """
-    
-    # Get data loaders
-    train_loader, val_loader, num_classes = get_data_loaders(
-        batch_size=batch_size
-    )
-    print(f"Number of classes: {num_classes}")
-    
-    # Create model
-    model = get_model(model_name)
-    
-    # Optionally freeze backbone
-    if freeze_backbone:
-        for param in model.parameters():
-            param.requires_grad = False
-        # Unfreeze final layer
-        if hasattr(model, 'fc'):
-            for param in model.fc.parameters():
-                param.requires_grad = True
-        elif hasattr(model, 'classifier'):
-            for param in model.classifier.parameters():
-                param.requires_grad = True
-    
-    model = model.to(device)
-    
-    # Loss and optimizer
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=lr
-    )
-    
-    # Learning rate scheduler
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
-    
-    # Training loop
-    best_acc = 0.0
-    
-    for epoch in range(epochs):
-        print(f"\nEpoch {epoch+1}/{epochs}")
-        print("-" * 40)
-        
-        train_loss, train_acc = train_epoch(model, train_loader, criterion, optimizer, device)
-        val_loss, val_acc = validate(model, val_loader, criterion, device)
-        
-        scheduler.step()
-        
-        print(f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.2f}%")
-        print(f"Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.2f}%")
-        
-        # Save best model
-        if val_acc > best_acc:
-            best_acc = val_acc
-            torch.save(model.state_dict(), f'best_{model_name}.pth')
-            print(f"Saved best model with accuracy: {best_acc:.2f}%")
-    
-    print(f"\nTraining complete! Best validation accuracy: {best_acc:.2f}%")
-    return model
+    def validate(self):
+        self.model.eval()
+        total_loss, total_correct, total = 0, 0, 0
+
+        with torch.no_grad():
+            for x, y in self.val_loader:
+                x, y = x.to(device), y.to(device)
+                out = self.model(x)
+                loss = self.criterion(out, y)
+
+                total_loss += loss.item() * x.size(0)
+                _, pred = out.max(1)
+                total_correct += pred.eq(y).sum().item()
+                total += y.size(0)
+
+        return total_loss / total, 100.0 * total_correct / total
+
+    def train_model(self, epochs, lr, freeze_backbone):
+        self.set_freeze_mode(freeze_backbone)
+        self.criterion = nn.CrossEntropyLoss()
+        self.optimizer = optim.Adam(
+            filter(lambda p: p.requires_grad, self.model.parameters()),
+            lr=lr
+        )
+        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=7, gamma=0.1)   
+        best_acc = 0.0
+        for epoch in range(epochs):
+            train_loss, train_acc = self.train_one_epoch()
+            val_loss, val_acc = self.validate()
+            self.scheduler.step()
+
+            print(f"Epoch {epoch+1}/{epochs} | "
+                  f"Train Loss: {train_loss:.4f} Acc: {train_acc:.2f}% | "
+                  f"Val Loss: {val_loss:.4f} Acc: {val_acc:.2f}%")
+
+            if val_acc > best_acc:
+                best_acc = val_acc
+                torch.save(self.model.state_dict(), f"best_{self.model_choice}.pth")
+                print(f"Saved best model (val_acc={best_acc:.2f}%)")
+
+        print(f"Finished training, Best acc: {best_acc:.2f}%")
+
+    def run(self):
+        self.get_data_loaders(batch_size=64)
+        self.get_model()
+
+        print("=== Phase 1: Train classifier only ===")
+        self.train_model(epochs=5, lr=0.001, freeze_backbone=True)
+
+        print("=== Phase 2: Fine-tune entire model ===")
+        self.train_model(epochs=5, lr=0.0001, freeze_backbone=False)
+
 
 if __name__ == "__main__":
     # Train with frozen backbone first (faster, less memory)
-    # print("Phase 1: Training with frozen backbone")
-    # model = train_model(
-    #     model_name="resnet50",  # Change model here
-    #     epochs=5,
-    #     batch_size=64,  # Adjust based on your VRAM usage
-    #     lr=0.001,
-    #     freeze_backbone=True
-    # )
-    
-    # Fine-tune entire model (optional)
-    print("\nPhase 2: Fine-tuning entire model")
-    model = train_model(
-        model_name="resnet50",
-        epochs=5,
-        batch_size=100,  # Reduce batch size for full fine-tuning
-        lr=0.0001,  # Lower learning rate
-        freeze_backbone=False
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model_choice", type=str, required=True, help="model choice")
+    args = parser.parse_args()
+    model_choice = args.model_choice
+
+    trainer = train(model_choice=model_choice)
+    trainer.run()
