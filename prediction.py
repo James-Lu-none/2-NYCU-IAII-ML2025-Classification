@@ -7,10 +7,16 @@ import csv
 import numpy as np
 from torchvision import datasets
 from models import *
+import argparse
 
-model_choice = "resnet50"
 test_dir = "./data/test-renamed_images"
 train_dir = "./data/train"
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--model_choice", type=str, required=True, help="model choice: xgboost, randomforest, regression")
+
+args = parser.parse_args()
+model_choice = args.model_choice
 
 timestamp = np.datetime64('now').astype('str').replace(':', '-').replace(' ', '_')
 output_dir = os.path.join("output",model_choice)
