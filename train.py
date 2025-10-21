@@ -6,35 +6,22 @@ from torchvision import datasets, transforms, models
 import os
 import numpy as np
 from collections import defaultdict
+from models import *
 
 data_dir = "./data"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-def get_model(model_name, num_classes, pretrained=True):
-    
-    if model_name == "resnet50":
-        model = models.resnet50(pretrained=pretrained)
-        # Simple: single linear layer
-        model.fc = nn.Linear(model.fc.in_features, num_classes)
+def get_model(model_name):
+    match model_name:
+        case "resnet50_v1":
+            return resnet50_v1()
+        case "resnet50_v2":
+            return resnet50_v2()
+        case "resnet101":
+            return resnet101_v1()
         
-        # Or custom: multiple layers with dropout
-        # model.fc = nn.Sequential(
-        #     nn.Linear(model.fc.in_features, 512),
-        #     nn.ReLU(),
-        #     nn.Dropout(0.3),
-        #     nn.Linear(512, num_classes)
-        # )
-        
-    elif model_name == "resnet101":
-        model = models.resnet101(pretrained=pretrained)
-        model.fc = nn.Linear(model.fc.in_features, num_classes)
-    else:
-        raise ValueError(f"Unknown model: {model_name}")
-    
-    return model
-
 # ============================================
 # 2. DATA PREPARATION
 # ============================================
@@ -180,7 +167,7 @@ def train_model(model_name, epochs=10,
     print(f"Number of classes: {num_classes}")
     
     # Create model
-    model = get_model(model_name, num_classes, pretrained=True)
+    model = get_model(model_name)
     
     # Optionally freeze backbone
     if freeze_backbone:
