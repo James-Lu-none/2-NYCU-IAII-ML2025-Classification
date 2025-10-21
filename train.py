@@ -45,85 +45,63 @@ def get_data_loaders(batch_size=32, num_workers=4):
         mean=[0.485, 0.456, 0.406],
         std=[0.229, 0.224, 0.225]
     )
-    
-    # Training transforms with augmentation
-    train_transform = transforms.Compose([
+
+    # Transforms (same for train/val here)
+    transform = transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
         normalize
     ])
-    
-    val_transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        normalize
-    ])
-    
-    # Create datasets
-    train_dataset = datasets.ImageFolder(
-        os.path.join(data_dir, 'pre'),
-        transform=train_transform
-    )
-    
-    val_dataset = datasets.ImageFolder(
-        os.path.join(data_dir, 'pre'),
-        transform=val_transform
-    )
+
+    # Use single source directory
+    full_dataset = datasets.ImageFolder(os.path.join(data_dir, "pre"))
+
+    # Stratified split by class
     val_split = 0.2
-        # Load full dataset first
-    full_dataset = datasets.ImageFolder(data_dir)
-    
-    # Group indices by class for stratified split
     class_indices = defaultdict(list)
     for idx, (_, label) in enumerate(full_dataset.samples):
         class_indices[label].append(idx)
-    
-    # Split indices for each class
-    train_indices = []
-    val_indices = []
-    
+
+    train_indices, val_indices = [], []
     np.random.seed(42)
-    
+
     for class_label, indices in class_indices.items():
         indices = np.array(indices)
         np.random.shuffle(indices)
-        
-        # Calculate split point
         split_point = int(len(indices) * (1 - val_split))
-        
         train_indices.extend(indices[:split_point].tolist())
         val_indices.extend(indices[split_point:].tolist())
-    
+
     print(f"Total samples: {len(full_dataset)}")
     print(f"Training samples: {len(train_indices)}")
     print(f"Validation samples: {len(val_indices)}")
-    
-    # Create subsets with appropriate transforms
-    train_dataset = datasets.ImageFolder(data_dir, transform=train_transform)
-    val_dataset = datasets.ImageFolder(data_dir, transform=val_transform)
-    
-    train_subset = Subset(train_dataset, train_indices)
-    val_subset = Subset(val_dataset, val_indices)
-    
-    # Create data loaders
+
+    # Create Subsets (keep correct indices, apply transforms after)
+    train_dataset = Subset(full_dataset, train_indices)
+    val_dataset = Subset(full_dataset, val_indices)
+
+    # Assign transforms AFTER splitting
+    train_dataset.dataset.transform = transform
+    val_dataset.dataset.transform = transform
+
+    # Dataloaders
     train_loader = DataLoader(
-        train_subset,
+        train_dataset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
         pin_memory=True
     )
-    
+
     val_loader = DataLoader(
-        val_subset,
+        val_dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
         pin_memory=True
     )
-    
+
     return train_loader, val_loader, len(full_dataset.classes)
 
 
@@ -254,21 +232,21 @@ def train_model(model_name, epochs=10,
 
 if __name__ == "__main__":
     # Train with frozen backbone first (faster, less memory)
-    print("Phase 1: Training with frozen backbone")
-    model = train_model(
-        model_name="resnet50",  # Change model here
-        epochs=5,
-        batch_size=64,  # Adjust based on your VRAM usage
-        lr=0.001,
-        freeze_backbone=True
-    )
+    # print("Phase 1: Training with frozen backbone")
+    # model = train_model(
+    #     model_name="resnet50",  # Change model here
+    #     epochs=5,
+    #     batch_size=64,  # Adjust based on your VRAM usage
+    #     lr=0.001,
+    #     freeze_backbone=True
+    # )
     
     # Fine-tune entire model (optional)
     print("\nPhase 2: Fine-tuning entire model")
     model = train_model(
         model_name="resnet50",
         epochs=5,
-        batch_size=32,  # Reduce batch size for full fine-tuning
+        batch_size=100,  # Reduce batch size for full fine-tuning
         lr=0.0001,  # Lower learning rate
         freeze_backbone=False
     )
