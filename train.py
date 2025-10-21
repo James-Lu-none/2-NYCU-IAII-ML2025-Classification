@@ -187,8 +187,8 @@ class train:
         self.get_data_loaders(batch_size=64)
         self.get_model()
 
-        print("=== Phase 1: Train classifier only ===")
-        self.train_model(epochs=5, lr=0.001, freeze_backbone=True)
+        # print("=== Phase 1: Train classifier only ===")
+        # self.train_model(epochs=5, lr=0.001, freeze_backbone=True)
 
         print("=== Phase 2: Fine-tune entire model ===")
         self.train_model(epochs=5, lr=0.0001, freeze_backbone=False)
