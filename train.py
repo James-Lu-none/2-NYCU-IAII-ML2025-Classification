@@ -27,13 +27,12 @@ class train:
         self.scheduler = None
 
     def get_model(self):
-        match self.model_choice:
-            case "resnet50_v1":
-                self.model = resnet50_v1()
-            case "resnet50_v2":
-                self.model = resnet50_v2()
-            case "resnet101_v1":
-                self.model = resnet101_v1()    
+        try:
+            model_fn = globals()[self.model_choice]  # look up function by name
+            self.model = model_fn()
+        except KeyError:
+            raise ValueError(f"Unknown model choice: {self.model_choice}")
+    
         self.model.to(device)
         
     def get_data_loaders(self, batch_size=32, num_workers=4):
