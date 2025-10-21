@@ -36,7 +36,7 @@ def get_model(model_name):
             return resnet50_v1()
         case "resnet50_v2":
             return resnet50_v2()
-        case "resnet101":
+        case "resnet101_v1":
             return resnet101_v1()
 
 
