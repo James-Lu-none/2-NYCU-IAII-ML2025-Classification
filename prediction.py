@@ -6,6 +6,7 @@ import os
 import csv
 import numpy as np
 from torchvision import datasets
+from models import *
 
 model_choice = "resnet50"
 test_dir = "./data/test-renamed_images"
@@ -23,16 +24,14 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 
-def get_model(model_choice, num_classes, pretrained=False):
-    if model_choice == "resnet50":
-        model = models.resnet50(pretrained=pretrained)
-        model.fc = nn.Linear(model.fc.in_features, num_classes)
-    elif model_choice == "resnet101":
-        model = models.resnet101(pretrained=pretrained)
-        model.fc = nn.Linear(model.fc.in_features, num_classes)
-    else:
-        raise ValueError(f"Unknown model: {model_choice}")
-    return model
+def get_model(model_name):
+    match model_name:
+        case "resnet50_v1":
+            return resnet50_v1()
+        case "resnet50_v2":
+            return resnet50_v2()
+        case "resnet101":
+            return resnet101_v1()
 
 
 transform = transforms.Compose([
@@ -46,7 +45,7 @@ transform = transforms.Compose([
 ])
 
 num_classes = len(class_names)
-model = get_model(model_choice, num_classes, pretrained=False)
+model = get_model(model_choice)
 model_path = os.path.join("model", model_choice)
 latest_model_state = os.listdir(model_path)
 model.load_state_dict(torch.load(os.path.join(model_path, latest_model_state[-1]), map_location=device))

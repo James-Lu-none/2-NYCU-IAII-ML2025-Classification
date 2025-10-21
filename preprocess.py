@@ -2,6 +2,7 @@ import os
 import torchvision.transforms.v2 as T
 from PIL import Image
 import torch
+from models import *
 
 src_folder = "./data/train"
 dst_folder = "./data/pre"
