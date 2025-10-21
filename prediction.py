@@ -5,28 +5,33 @@ from PIL import Image
 import os
 import csv
 import numpy as np
-model = "resnet50"
-model_path = "best_resnet50.pth"
-data_dir = "./data/test-renamed_images"
-timestamp = np.datetime64('now').astype('str').replace(':', '-').replace(' ', '_')
-output_csv = f"{model}_{timestamp}.csv"
+from torchvision import datasets
+
+model_choice = "resnet50"
+test_dir = "./data/test-renamed_images"
 train_dir = "./data/train"
 
-class_names = os.listdir(train_dir)
+timestamp = np.datetime64('now').astype('str').replace(':', '-').replace(' ', '_')
+output_dir = os.path.join("output",model_choice)
+os.makedirs(output_dir, exist_ok=True)
+output_csv = os.path.join(output_dir,f"{timestamp}.csv")
+
+train_dataset = datasets.ImageFolder(train_dir)
+class_names = train_dataset.classes
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 
-def get_model(model_name, num_classes, pretrained=False):
-    if model_name == "resnet50":
+def get_model(model_choice, num_classes, pretrained=False):
+    if model_choice == "resnet50":
         model = models.resnet50(pretrained=pretrained)
         model.fc = nn.Linear(model.fc.in_features, num_classes)
-    elif model_name == "resnet101":
+    elif model_choice == "resnet101":
         model = models.resnet101(pretrained=pretrained)
         model.fc = nn.Linear(model.fc.in_features, num_classes)
     else:
-        raise ValueError(f"Unknown model: {model_name}")
+        raise ValueError(f"Unknown model: {model_choice}")
     return model
 
 
@@ -41,20 +46,22 @@ transform = transforms.Compose([
 ])
 
 num_classes = len(class_names)
-model = get_model(model, num_classes, pretrained=False)
-model.load_state_dict(torch.load(model_path, map_location=device))
+model = get_model(model_choice, num_classes, pretrained=False)
+model_path = os.path.join("model", model_choice)
+latest_model_state = os.listdir(model_path)
+model.load_state_dict(torch.load(os.path.join(model_path, latest_model_state[-1]), map_location=device))
 model = model.to(device)
 model.eval()
 
 results = []
-image_files = sorted([
-    f for f in os.listdir(data_dir)
-    if f.lower().endswith((".jpg", ".jpeg", ".png"))
-])
+image_files = sorted(
+    [f for f in os.listdir(test_dir) if f.lower().endswith((".jpg"))],
+    key=lambda x: int(os.path.splitext(x)[0])
+)
 
 with torch.no_grad():
     for idx, filename in enumerate(image_files, start=1):
-        img_path = os.path.join(data_dir, filename)
+        img_path = os.path.join(test_dir, filename)
         img = Image.open(img_path).convert("RGB")
         input_tensor = transform(img).unsqueeze(0).to(device)
 
