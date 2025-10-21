@@ -1,11 +1,16 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms, models
 import os
+import numpy as np
+from collections import defaultdict
 
 data_dir = "./data"
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
 def get_model(model_name, num_classes, pretrained=True):
     
@@ -35,17 +40,6 @@ def get_model(model_name, num_classes, pretrained=True):
 # ============================================
 
 def get_data_loaders(batch_size=32, num_workers=4):
-    """
-    Create data loaders with ImageNet normalization
-    Expected structure:
-    data_dir/
-        train/
-            class1/
-            class2/
-        val/
-            class1/
-            class2/
-    """
     # ImageNet normalization
     normalize = transforms.Normalize(
         mean=[0.485, 0.456, 0.406],
@@ -54,14 +48,12 @@ def get_data_loaders(batch_size=32, num_workers=4):
     
     # Training transforms with augmentation
     train_transform = transforms.Compose([
-        transforms.RandomResizedCrop(224),
-        transforms.RandomHorizontalFlip(),
-        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
         transforms.ToTensor(),
         normalize
     ])
     
-    # Validation transforms (no augmentation)
     val_transform = transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(224),
@@ -71,18 +63,53 @@ def get_data_loaders(batch_size=32, num_workers=4):
     
     # Create datasets
     train_dataset = datasets.ImageFolder(
-        os.path.join(data_dir, 'train'),
+        os.path.join(data_dir, 'pre'),
         transform=train_transform
     )
     
     val_dataset = datasets.ImageFolder(
-        os.path.join(data_dir, 'val'),
+        os.path.join(data_dir, 'pre'),
         transform=val_transform
     )
+    val_split = 0.2
+        # Load full dataset first
+    full_dataset = datasets.ImageFolder(data_dir)
+    
+    # Group indices by class for stratified split
+    class_indices = defaultdict(list)
+    for idx, (_, label) in enumerate(full_dataset.samples):
+        class_indices[label].append(idx)
+    
+    # Split indices for each class
+    train_indices = []
+    val_indices = []
+    
+    np.random.seed(42)
+    
+    for class_label, indices in class_indices.items():
+        indices = np.array(indices)
+        np.random.shuffle(indices)
+        
+        # Calculate split point
+        split_point = int(len(indices) * (1 - val_split))
+        
+        train_indices.extend(indices[:split_point].tolist())
+        val_indices.extend(indices[split_point:].tolist())
+    
+    print(f"Total samples: {len(full_dataset)}")
+    print(f"Training samples: {len(train_indices)}")
+    print(f"Validation samples: {len(val_indices)}")
+    
+    # Create subsets with appropriate transforms
+    train_dataset = datasets.ImageFolder(data_dir, transform=train_transform)
+    val_dataset = datasets.ImageFolder(data_dir, transform=val_transform)
+    
+    train_subset = Subset(train_dataset, train_indices)
+    val_subset = Subset(val_dataset, val_indices)
     
     # Create data loaders
     train_loader = DataLoader(
-        train_dataset,
+        train_subset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
@@ -90,14 +117,15 @@ def get_data_loaders(batch_size=32, num_workers=4):
     )
     
     val_loader = DataLoader(
-        val_dataset,
+        val_subset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
         pin_memory=True
     )
     
-    return train_loader, val_loader, len(train_dataset.classes)
+    return train_loader, val_loader, len(full_dataset.classes)
+
 
 # ============================================
 # 3. TRAINING FUNCTION
@@ -153,7 +181,7 @@ def validate(model, loader, criterion, device):
 # 4. MAIN TRAINING LOOP
 # ============================================
 
-def train_model(model_name="efficientnet_b0", epochs=10, 
+def train_model(model_name, epochs=10, 
                 batch_size=32, lr=0.001, freeze_backbone=True):
     """
     Train a transfer learning model
@@ -169,7 +197,7 @@ def train_model(model_name="efficientnet_b0", epochs=10,
     
     # Get data loaders
     train_loader, val_loader, num_classes = get_data_loaders(
-        data_dir, batch_size=batch_size
+        batch_size=batch_size
     )
     print(f"Number of classes: {num_classes}")
     
@@ -228,7 +256,7 @@ if __name__ == "__main__":
     # Train with frozen backbone first (faster, less memory)
     print("Phase 1: Training with frozen backbone")
     model = train_model(
-        model_name="efficientnet_b0",  # Change model here
+        model_name="resnet50",  # Change model here
         epochs=5,
         batch_size=64,  # Adjust based on your VRAM usage
         lr=0.001,
@@ -238,7 +266,7 @@ if __name__ == "__main__":
     # Fine-tune entire model (optional)
     print("\nPhase 2: Fine-tuning entire model")
     model = train_model(
-        model_name="efficientnet_b0",
+        model_name="resnet50",
         epochs=5,
         batch_size=32,  # Reduce batch size for full fine-tuning
         lr=0.0001,  # Lower learning rate
