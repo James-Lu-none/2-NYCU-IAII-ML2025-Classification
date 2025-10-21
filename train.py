@@ -165,7 +165,7 @@ class train:
             filter(lambda p: p.requires_grad, self.model.parameters()),
             lr=lr
         )
-        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=7, gamma=0.1)   
+        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=1, gamma=0.5)   
         best_acc = 0.0
         for epoch in range(epochs):
             train_loss, train_acc = self.train_one_epoch()
@@ -191,7 +191,7 @@ class train:
         # self.train_model(epochs=5, lr=0.001, freeze_backbone=True)
 
         print("=== Phase 2: Fine-tune entire model ===")
-        self.train_model(epochs=5, lr=0.0001, freeze_backbone=False)
+        self.train_model(epochs=3, lr=0.001, freeze_backbone=False)
 
         timestamp = np.datetime64('now').astype('str').replace(':', '-').replace(' ', '_')
         model_path = os.path.join(model_dir, self.model_choice)
