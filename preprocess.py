@@ -3,6 +3,9 @@ import torchvision.transforms.v2 as T
 from PIL import Image
 import torch
 
+src_folder = "./data/train"
+dst_folder = "./data/pre"
+
 # Custom transform to add Gaussian noise
 class AddGaussianNoise(object):
     def __init__(self, mean=0., std=1.):
@@ -76,8 +79,6 @@ class AddSaltPepperNoise(object):
         tensor[(noise < self.salt_prob)] = 1  # Salt noise: setting some pixels to 1
         tensor[(noise > 1 - self.pepper_prob)] = 0  # Pepper noise: setting some pixels to 0
         return tensor
-
-# Define the image augmentation transformations
 transform = T.Compose([
     T.ToTensor(),  # Convert PIL image to tensor
 
@@ -108,33 +109,21 @@ transform = T.Compose([
 
 ])
 
-# Source folder containing the original images
-src_folder = "test-in"
-
-# Destination folder to save the augmented images
-dst_folder = "test-out"
-
-# Create the destination folder if it doesn't exist
 if not os.path.exists(dst_folder):
     os.makedirs(dst_folder)
 
-# Loop through each file in the source folder
-i=0
-for filename in os.listdir(src_folder):
-    if filename.endswith(".jpg") or filename.endswith(".jpeg") or filename.endswith(".png"):
-        # Load the image
-        print("Reading ... ", filename)
-        img_path = os.path.join(src_folder, filename)
-        img = Image.open(img_path).convert("RGB")
-
-        # Apply the transformations
-        img_augmented = transform(img)
-
-        # Save the augmented image
-        print("Saving ... ", filename)
-        save_path = os.path.join(dst_folder, filename)
-        img_augmented.save(save_path, "JPEG")
-        i=i+1
-        print(i)
-
+for c in os.listdir(src_folder):
+    i = 0
+    src_class_folder = os.path.join(src_folder, c)
+    dst_class_folder = os.path.join(dst_folder, c)
+    os.makedirs(dst_class_folder, exist_ok=True)
+    print(f"{len(os.listdir(src_class_folder))} files in class: {c}")
+    for f in os.listdir(src_class_folder):
+        src_path = os.path.join(src_class_folder, f)
+        img = Image.open(src_path).convert("RGB")
+        aug_img = transform(img)
+        dst_path = os.path.join(dst_class_folder, f"{i}.jpg")
+        aug_img.save(dst_path)
+        i += 1
+    print(f"{i} files generated")
 print("Image augmentation completed.")
