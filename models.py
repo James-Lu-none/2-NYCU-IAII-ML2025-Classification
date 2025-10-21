@@ -18,6 +18,6 @@ def resnet50_v2():
     return model
 
 def resnet101_v1():
-    model = models.resnet50(weights='DEFAULT')
+    model = models.resnet101(weights='DEFAULT')
     model.fc = nn.Linear(model.fc.in_features, num_classes)
     return model
