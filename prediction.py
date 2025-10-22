@@ -8,6 +8,7 @@ import numpy as np
 from torchvision import datasets
 from models import *
 import argparse
+from tqdm import tqdm
 
 test_dir = "./data/test-renamed_images"
 train_dir = "./data/train"
@@ -53,6 +54,7 @@ num_classes = len(class_names)
 model = get_model(model_choice)
 model_path = os.path.join("model", model_choice)
 latest_model_state = os.listdir(model_path)
+print(f"using model state: {latest_model_state[-1]}")
 model.load_state_dict(torch.load(os.path.join(model_path, latest_model_state[-1]), map_location=device))
 model = model.to(device)
 model.eval()
@@ -64,7 +66,8 @@ image_files = sorted(
 )
 
 with torch.no_grad():
-    for idx, filename in enumerate(image_files, start=1):
+    progress_bar = tqdm(image_files, desc="Predicting", unit="image")
+    for idx, filename in enumerate(progress_bar):
         img_path = os.path.join(test_dir, filename)
         img = Image.open(img_path).convert("RGB")
         input_tensor = transform(img).unsqueeze(0).to(device)
@@ -73,9 +76,9 @@ with torch.no_grad():
         _, pred = torch.max(outputs, 1)
         label = class_names[pred.item()]
 
-        results.append([idx, label])
+        results.append([idx + 1, label])
 
-        print(f"{idx}: {filename} -> {label}")
+        # print(f"{idx}: {filename} -> {label}")
 
 with open(output_csv, mode="w", newline="") as f:
     writer = csv.writer(f)
