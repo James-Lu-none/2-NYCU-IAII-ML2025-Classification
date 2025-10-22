@@ -25,6 +25,7 @@ class train:
         self.criterion = None
         self.optimizer = None
         self.scheduler = None
+        self.best_acc = 0
 
     def get_model(self):
         try:
@@ -165,8 +166,7 @@ class train:
             filter(lambda p: p.requires_grad, self.model.parameters()),
             lr=lr
         )
-        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=1, gamma=0.5)   
-        best_acc = 0.0
+        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=1, gamma=0.5)
         for epoch in range(epochs):
             train_loss, train_acc = self.train_one_epoch()
             val_loss, val_acc = self.validate()
@@ -176,12 +176,12 @@ class train:
                   f"Train Loss: {train_loss:.4f} Acc: {train_acc:.2f}% | "
                   f"Val Loss: {val_loss:.4f} Acc: {val_acc:.2f}%")
 
-            if val_acc > best_acc:
-                best_acc = val_acc
+            if val_acc > self.best_acc:
+                self.best_acc = val_acc
                 self.best_weights = self.model.state_dict()
-                print(f"New best model (val_acc={best_acc:.2f}%)")
+                print(f"New best model (val_acc={self.best_acc:.2f}%)")
 
-        print(f"Finished training, Best acc: {best_acc:.2f}%")
+        print(f"Finished training, Best acc: {self.best_acc:.2f}%")
 
     def run(self):
         self.get_data_loaders(batch_size=64)
@@ -196,7 +196,8 @@ class train:
         timestamp = np.datetime64('now').astype('str').replace(':', '-').replace(' ', '_')
         model_path = os.path.join(model_dir, self.model_choice)
         os.makedirs(model_path, exist_ok=True)
-        model_disk = os.path.join(model_path, f"{timestamp}.pth")
+        print(f"Saving best model to {model_path}/{timestamp}_{self.best_acc}.pth")
+        model_disk = os.path.join(model_path, f"{timestamp}_{self.best_acc}.pth")
         torch.save(self.model.state_dict(), model_disk)
 
 if __name__ == "__main__":
