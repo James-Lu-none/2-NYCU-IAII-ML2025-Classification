@@ -184,14 +184,14 @@ class train:
         print(f"Finished training, Best acc: {self.best_acc:.2f}%")
 
     def run(self):
-        self.get_data_loaders(batch_size=64)
+        self.get_data_loaders(batch_size=40)
         self.get_model()
 
         # print("=== Phase 1: Train classifier only ===")
         # self.train_model(epochs=5, lr=0.001, freeze_backbone=True)
 
         print("=== Phase 2: Fine-tune entire model ===")
-        self.train_model(epochs=3, lr=0.001, freeze_backbone=False)
+        self.train_model(epochs=5, lr=0.001, freeze_backbone=False)
 
         timestamp = np.datetime64('now').astype('str').replace(':', '-').replace(' ', '_')
         model_path = os.path.join(model_dir, self.model_choice)
