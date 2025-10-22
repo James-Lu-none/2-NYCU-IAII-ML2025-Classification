@@ -76,9 +76,10 @@ class AddSaltPepperNoise(object):
         self.pepper_prob = pepper_prob
 
     def __call__(self, tensor):
+        tensor = tensor.clone()
         noise = torch.rand(tensor.size())
-        tensor[(noise < self.salt_prob)] = 1  # Salt noise: setting some pixels to 1
-        tensor[(noise > 1 - self.pepper_prob)] = 0  # Pepper noise: setting some pixels to 0
+        tensor[noise < self.salt_prob] = 1  # Salt noise: setting some pixels to 1
+        tensor[noise > 1 - self.pepper_prob] = 0  # Pepper noise: setting some pixels to 0
         return tensor
 transform = T.Compose([
     T.ToTensor(),  # Convert PIL image to tensor
