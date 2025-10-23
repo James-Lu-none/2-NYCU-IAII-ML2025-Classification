@@ -115,7 +115,7 @@ if not os.path.exists(dst_folder):
     os.makedirs(dst_folder)
 
 n_per_class = 10000
-transform_per_image = 2
+transform_per_image = 4
 for c in os.listdir(src_folder):
     i = 0
     src_class_folder = os.path.join(src_folder, c)
