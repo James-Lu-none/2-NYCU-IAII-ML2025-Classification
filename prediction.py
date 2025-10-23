@@ -9,6 +9,7 @@ from torchvision import datasets
 from models import *
 import argparse
 from tqdm import tqdm
+from datetime import datetime
 
 test_dir = "./data/test-renamed_images"
 train_dir = "./data/train"
@@ -53,8 +54,27 @@ transform = transforms.Compose([
 num_classes = len(class_names)
 model = get_model(model_choice)
 model_path = os.path.join("model", model_choice)
-latest_model_state = os.listdir(model_path)
-print(f"using model state: {latest_model_state[-1]}")
+
+# choose latest model state by file name in format yyyy_mm_ddThh-mm-ss
+files = [f for f in os.listdir(model_path) if os.path.isfile(os.path.join(model_path, f))]
+dated_files = []
+for f in files:
+    name, ext = os.path.splitext(f)
+    try:
+        dt = datetime.strptime(name, "%Y_%m_%dT%H-%M-%S")
+        dated_files.append((dt, f))
+    except ValueError:
+        continue
+
+if dated_files:
+    dated_files.sort()
+    latest_model_state = [dated_files[-1][1]]
+else:
+    if not files:
+        raise FileNotFoundError(f"No model files found in {model_path}")
+    latest_model_state = [max(files, key=lambda x: os.path.getmtime(os.path.join(model_path, x)))]
+
+print(f"using model state: {latest_model_state[0]}")
 model.load_state_dict(torch.load(os.path.join(model_path, latest_model_state[-1]), map_location=device))
 model = model.to(device)
 model.eval()
