@@ -4,9 +4,6 @@ from PIL import Image
 import torch
 from models import *
 
-src_folder = "./data/train"
-dst_folder = "./data/pre"
-
 # Custom transform to add Gaussian noise
 class AddGaussianNoise(object):
     def __init__(self, mean=0., std=1.):
@@ -82,61 +79,99 @@ class AddSaltPepperNoise(object):
         tensor[noise > 1 - self.pepper_prob] = 0  # Pepper noise: setting some pixels to 0
         return tensor
 
+def augment_data(src_folder, dst_folder, transform, n_per_class=10000, transform_per_image=4):
+    for c in os.listdir(src_folder):
+        i = 0
+        src_class_folder = os.path.join(src_folder, c)
+        dst_class_folder = os.path.join(dst_folder, c)
+        os.makedirs(dst_class_folder, exist_ok=True)
+        print(f"{len(os.listdir(src_class_folder))} files in class: {c}")
+        for f in os.listdir(src_class_folder):
+            if i >= n_per_class:
+                break
+            src_path = os.path.join(src_class_folder, f)
+            img = Image.open(src_path).convert("RGB")
+            aug_imgs = []
+            for k in range(transform_per_image):
+                aug_img = transform(img)
+                aug_imgs.append(aug_img)
+
+            # before_path = os.path.join(dst_class_folder, f"{i}.jpg")
+            # img.save(before_path)
+            for j, aug_img in enumerate(aug_imgs):
+                dst_path = os.path.join(dst_class_folder, f"{i}_{j}.jpg")
+                aug_img.save(dst_path)
+            i += 1
+        print(f"{i*transform_per_image} file generated")
+        
 transform = T.Compose([
     T.ToTensor(),  # Convert PIL image to tensor
 
-    T.RandomApply([T.RandomHorizontalFlip()], p=0.2),
-    T.RandomApply([T.RandomVerticalFlip()], p=0.2),
-    T.RandomApply([T.RandomRotation(10)], p=0.2),
+    T.RandomApply([T.RandomHorizontalFlip()], p=0.1),
+    T.RandomApply([T.RandomVerticalFlip()], p=0.1),
+    T.RandomApply([T.RandomRotation(10)], p=0.1),
 
-    T.RandomApply([T.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1)], p=0.2),
-    T.RandomGrayscale(p=0.2),
-    T.RandomInvert(p=0.2),
-    T.RandomPosterize(bits=2, p=0.2),
+    T.RandomApply([T.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1)], p=0.1),
+    T.RandomGrayscale(p=0.1),
+    T.RandomInvert(p=0.1),
+    T.RandomPosterize(bits=2, p=0.1),
     T.RandomApply([T.RandomSolarize(threshold=1.0)], p=0.05),
-    T.RandomApply([T.RandomAdjustSharpness(sharpness_factor=2)], p=0.2),
+    T.RandomApply([T.RandomAdjustSharpness(sharpness_factor=2)], p=0.1),
 
-    T.RandomApply([AddGaussianNoise(0., 0.05)], p=0.2),  # mean and std
-    T.RandomApply([AddPoissonNoise(lam=0.1)], p=0.2),  # mean and std
-    T.RandomApply([AddSpeckleNoise(noise_level=0.1)], p=0.2),
-    T.RandomApply([AddSaltPepperNoise(salt_prob=0.05, pepper_prob=0.05)], p=0.2),
+    T.RandomApply([AddGaussianNoise(0., 0.05)], p=0.1),  # mean and std
+    T.RandomApply([AddPoissonNoise(lam=0.1)], p=0.1),  # mean and std
+    T.RandomApply([AddSpeckleNoise(noise_level=0.1)], p=0.1),
+    T.RandomApply([AddSaltPepperNoise(salt_prob=0.05, pepper_prob=0.05)], p=0.1),
 
-    T.RandomApply([T.RandomPerspective(distortion_scale=0.6, p=1.0)], p=0.2),
-    T.RandomApply([T.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75))], p=0.2),
-    T.RandomApply([T.ElasticTransform(alpha=250.0)], p=0.2),
+    T.RandomApply([T.RandomPerspective(distortion_scale=0.6, p=1.0)], p=0.1),
+    T.RandomApply([T.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75))], p=0.1),
+    T.RandomApply([T.ElasticTransform(alpha=250.0)], p=0.1),
 
-    T.RandomApply([T.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5.))], p=0.2),
+    T.RandomApply([T.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5.))], p=0.1),
 
     T.RandomApply([AddGaussianNoise(0., 0.001)], p=1.0),  # mean and std
     T.ToPILImage()  # Convert tensor back to PIL image for saving
 ])
 
+elastic_transform = T.Compose([
+    T.ToTensor(),  # Convert PIL image to tensor
+
+    T.RandomApply([T.RandomHorizontalFlip()], p=0.1),
+    T.RandomApply([T.RandomVerticalFlip()], p=0.1),
+    T.RandomApply([T.RandomRotation(10)], p=0.1),
+
+    T.RandomApply([T.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1)], p=0.1),
+    T.RandomGrayscale(p=0.1),
+    T.RandomInvert(p=0.1),
+    T.RandomPosterize(bits=2, p=0.1),
+    T.RandomApply([T.RandomSolarize(threshold=1.0)], p=0.05),
+    T.RandomApply([T.RandomAdjustSharpness(sharpness_factor=2)], p=0.1),
+
+    T.RandomApply([AddGaussianNoise(0., 0.05)], p=0.1),  # mean and std
+    T.RandomApply([AddPoissonNoise(lam=0.1)], p=0.1),  # mean and std
+    T.RandomApply([AddSpeckleNoise(noise_level=0.1)], p=0.1),
+    T.RandomApply([AddSaltPepperNoise(salt_prob=0.05, pepper_prob=0.05)], p=0.1),
+
+    T.RandomApply([T.RandomPerspective(distortion_scale=0.6, p=1.0)], p=0.1),
+    T.RandomApply([T.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75))], p=0.1),
+    T.ElasticTransform(alpha=250.0),
+
+    T.RandomApply([T.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5.))], p=0.1),
+
+    T.RandomApply([AddGaussianNoise(0., 0.001)], p=1.0),  # mean and std
+    T.ToPILImage()  # Convert tensor back to PIL image for saving
+])
+
+src_folder = "./data/train"
+dst_folder = "./data/pre"
+elastic_folder = "./data/elastic"
 if not os.path.exists(dst_folder):
     os.makedirs(dst_folder)
 
-n_per_class = 10000
-transform_per_image = 4
-for c in os.listdir(src_folder):
-    i = 0
-    src_class_folder = os.path.join(src_folder, c)
-    dst_class_folder = os.path.join(dst_folder, c)
-    os.makedirs(dst_class_folder, exist_ok=True)
-    print(f"{len(os.listdir(src_class_folder))} files in class: {c}")
-    for f in os.listdir(src_class_folder):
-        if i >= n_per_class:
-            break
-        src_path = os.path.join(src_class_folder, f)
-        img = Image.open(src_path).convert("RGB")
-        aug_imgs = []
-        for k in range(transform_per_image):
-            aug_img = transform(img)
-            aug_imgs.append(aug_img)
+if not os.path.exists(elastic_folder):
+    os.makedirs(elastic_folder)
 
-        # before_path = os.path.join(dst_class_folder, f"{i}.jpg")
-        # img.save(before_path)
-        for j, aug_img in enumerate(aug_imgs):
-            dst_path = os.path.join(dst_class_folder, f"{i}_{j}.jpg")
-            aug_img.save(dst_path)
-        i += 1
-    print(f"{i*transform_per_image} file generated")
+# augment_data(src_folder, dst_folder, transform, n_per_class=10000, transform_per_image=4)
+augment_data(src_folder, elastic_folder, elastic_transform, n_per_class=10000, transform_per_image=1)
+
 print("Image augmentation completed.")
