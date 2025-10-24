@@ -15,7 +15,7 @@ model_dir = "./model"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 class train:
-    def __init__(self, model_choice=None):
+    def __init__(self, model_choice=None, model_state_path=None, dataset=None):
         self.model = None
         self.model_choice = model_choice
         self.train_loader = None
@@ -26,6 +26,8 @@ class train:
         self.optimizer = None
         self.scheduler = None
         self.best_acc = 0
+        self.model_state_path = model_state_path
+        self.dataset = dataset
 
     def get_model(self):
         try:
@@ -52,7 +54,7 @@ class train:
         ])
 
         # Use single source directory
-        full_dataset = datasets.ImageFolder(os.path.join(data_dir, "pre"))
+        full_dataset = datasets.ImageFolder(os.path.join(data_dir, self.dataset))
 
         # Stratified split by class
         val_split = 0.2
@@ -187,6 +189,10 @@ class train:
         self.get_data_loaders(batch_size=40)
         self.get_model()
 
+        if self.model_state_path:
+            print(f"Loading model state from {self.model_state_path} for fine-tuning")
+            self.model.load_state_dict(torch.load(self.model_state_path, map_location=device))
+        
         # print("=== Phase 1: Train classifier only ===")
         # self.train_model(epochs=5, lr=0.001, freeze_backbone=True)
 
@@ -204,8 +210,12 @@ if __name__ == "__main__":
     # Train with frozen backbone first (faster, less memory)
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_choice", type=str, required=True, help="model choice")
+    parser.add_argument("--model_state_path", type=str, required=False, help="model state path for fine-tuning")
+    parser.add_argument("--dataset", type=str, required=True, help="training dataset")
     args = parser.parse_args()
     model_choice = args.model_choice
+    model_state_path = args.model_state_path
+    dataset = args.dataset
 
-    trainer = train(model_choice=model_choice)
+    trainer = train(model_choice=model_choice, model_state_path=model_state_path, dataset=dataset)
     trainer.run()
