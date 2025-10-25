@@ -51,3 +51,21 @@ def resnext101_64x4d_v2():
         nn.Linear(512, num_classes)
     )
     return model
+
+def convnext_small_v1():
+    model = models.convnext_small(weights='DEFAULT')
+    in_features = model.classifier[2].in_features
+    model.classifier[2] = nn.Linear(in_features, num_classes)
+    return model
+
+def convnext_base_v1():
+    model = models.convnext_base(weights='DEFAULT')
+    in_features = model.classifier[2].in_features
+    model.classifier[2] = nn.Linear(in_features, num_classes)
+    return model
+
+def convnext_large_v1():
+    model = models.convnext_large(weights='DEFAULT')
+    in_features = model.classifier[2].in_features
+    model.classifier[2] = nn.Linear(in_features, num_classes)
+    return model
