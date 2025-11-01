@@ -8,6 +8,7 @@ import argparse
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+import torchvision.utils as vutils
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class visualization:
@@ -49,6 +50,13 @@ class visualization:
         self.model.eval()
         with torch.no_grad():
             images, _ = next(iter(sample_loader))
+            inv_normalize = transforms.Normalize(
+                mean=[-m/s for m, s in zip([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])],
+                std=[1/s for s in [0.229, 0.224, 0.225]]
+            )
+            img = inv_normalize(images[0].cpu())
+            img = torch.clamp(img, 0, 1)  # ensure pixel range is valid
+            vutils.save_image(img, f"visualizations/feature_maps_original.png")
             images = images.to(device)
 
             # Forward pass through each major stage
