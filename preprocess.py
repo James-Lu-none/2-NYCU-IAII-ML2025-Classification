@@ -171,7 +171,7 @@ if not os.path.exists(dst_folder):
 if not os.path.exists(elastic_folder):
     os.makedirs(elastic_folder)
 
-# augment_data(src_folder, dst_folder, transform, n_per_class=10000, transform_per_image=4)
-augment_data(src_folder, elastic_folder, elastic_transform, n_per_class=10000, transform_per_image=1)
+augment_data(src_folder, dst_folder, transform, n_per_class=30, transform_per_image=1)
+# augment_data(src_folder, elastic_folder, elastic_transform, n_per_class=10000, transform_per_image=1)
 
 print("Image augmentation completed.")
