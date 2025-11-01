@@ -6,6 +6,8 @@ import os
 from models import *
 import argparse
 import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class visualization:
@@ -43,7 +45,7 @@ class visualization:
         # load a image from dataset and visualize the image after passing the first convolutional layer
         sample_image = datasets.ImageFolder(root=sample_image_path, transform=transform)
         sample_loader = DataLoader(sample_image, batch_size=1, shuffle=True)
-    
+        self.confusion_matrix()
         self.model.eval()
         with torch.no_grad():
             images, _ = next(iter(sample_loader))
@@ -87,6 +89,49 @@ class visualization:
         out_path = os.path.join("visualizations", f"feature_maps_{layer_name}.png")
         plt.savefig(out_path, bbox_inches='tight')
         plt.close()
+    
+    def confusion_matrix(self):
+        normalize = True
+        save_path = os.path.join("visualizations", "confusion_matrix.png")
+        transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+        ])
+
+        test_dataset = datasets.ImageFolder(root=f'./data/{self.dataset}', transform=transform)
+        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+        self.model.eval()
+        all_preds = []
+        all_labels = []
+
+        with torch.no_grad():
+            for images, labels in test_loader:
+                images, labels = images.to(device), labels.to(device)
+                outputs = self.model(images)
+                preds = torch.argmax(outputs, dim=1)
+                all_preds.extend(preds.cpu().numpy())
+                all_labels.extend(labels.cpu().numpy())
+
+        # Compute confusion matrix
+        cm = confusion_matrix(all_labels, all_preds, normalize='true' if normalize else None)
+        class_names = test_dataset.classes
+        # Class names
+        if class_names is None:
+            num_classes = len(set(all_labels))
+            class_names = [f"Class {i}" for i in range(num_classes)]
+
+        # Plot confusion matrix
+        plt.figure(figsize=(32, 24))
+        sns.heatmap(cm, annot=True, fmt=".2f" if normalize else "d", cmap="Blues",
+                    xticklabels=class_names, yticklabels=class_names)
+        plt.xlabel("Predicted")
+        plt.ylabel("True")
+        plt.title("Confusion Matrix" + (" (Normalized)" if normalize else ""))
+        plt.tight_layout()
+        plt.savefig(save_path)
+        plt.close()
+        return cm
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_choice", type=str, required=True, help="model choice")
